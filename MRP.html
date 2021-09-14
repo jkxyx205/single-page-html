@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MRP</title>
+    <link rel="stylesheet" href="https://unpkg.com/purecss@2.0.6/build/pure-min.css" integrity="sha384-Uu6IeWbM+gzNVXJcM9XV3SohHtmWE+3VGi496jvgX1jyvDTXfdK+rfZc8C1Aehk5" crossorigin="anonymous">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        .size-container {
+            padding-top: 12px
+        }
+    </style>
+</head>
+<body>
+    <div class="pure-g">
+        <div class="pure-u-24-24">
+            <div style="padding: 24px;" id="app">
+                <form class="pure-form">
+                    <fieldset>
+                        <legend>MRP配置</legend>
+                          <select v-model="mrpType">
+                            <option value="VB">VB</option>
+                            <option value="PD">PD</option>
+                        </select>
+                       <select v-model="size">
+                            <option value="EX">EX</option>
+                            <option value="H1">H1</option>
+                            <option value="HB">HB</option>
+                        </select>
+                        <input v-show="isVB" type="number" v-model.number="reorderPoint" placeholder="Reorder Point" />
+                        <input v-show="!isVB" type="number" v-model.number="safetyStock" placeholder="Safety Stock" />
+                        
+                        <div class="size-container">
+                            <input type="number" v-model.number="minimumLotSize" placeholder="Minimum Lot Size" /> ~ <input type="number" v-model.number="maximumLotSize" placeholder="Maximum Lot Size" />
+                        </div>
+                        <div class="size-container" v-show="isH">
+                            <input type="number" v-model.number="maximumStockLevel" placeholder="Maximum Stock level" />
+                        </div>
+                        
+                    </fieldset>
+                    <fieldset>
+                        <legend>业务数据</legend>
+                        <input type="number" v-model.number="stock" placeholder="Stock" />
+                        <input v-show="!isVB" type="number" v-model.number="requirement" placeholder="Requirement" />
+                    </fieldset>
+                    <button type="button" class="pure-button pure-button-primary" @click="execute" :disabled="false">执行</button>
+                </form>
+                <div v-html="log" style="padding: 12px; color: #909399; font-size: 0.8em; line-height: 1.8">
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.14/vue.min.js"></script>
+    <script>
+        var app = new Vue({
+          el: '#app',
+          data: {
+            mrpType: 'VB',
+            size: 'EX',
+            safetyStock: null,
+            minimumLotSize: null,
+            maximumLotSize: null,
+            maximumStockLevel: null,
+            stock: null,
+            requirement: null,
+            reorderPoint: null,
+            log: ''
+          },
+          computed: {
+            isH() {
+                return this.size == 'HB' || this.size == 'H1'
+            },
+            isVB() {
+                return this.mrpType == 'VB'
+            }
+          },
+          methods: {
+            execute() {
+                var purchasePoint = 0 // 采购点
+                var currentStock = this.stock // 库存
+                var targetStock = 0 // 目标库存
+
+                var calcStock = this.stock // 预计库存（扣除需求和安全库存）
+                var requestStock = 0 // 需求数量，也有可能是dummy的需求
+                var diffStock = 0 // 计划补货数量
+
+                var safetyStock = this.safetyStock ? this.safetyStock : 0
+
+                if (this.isH) {
+                    targetStock = this.maximumStockLevel
+                }
+
+                if (this.mrpType === 'PD') {
+                    requestStock = this.requirement
+                }
+
+                if (this.isVB) {
+                    purchasePoint = this.reorderPoint
+
+                    if (this.size === 'EX') {
+                        targetStock = this.reorderPoint
+                    } else if (this.size === 'H1') {
+                        requestStock = purchasePoint // dummy的需求
+                    }
+
+                    
+                } 
+                
+                calcStock = this.stock - safetyStock - requestStock 
+
+                this.log = '✏️ 采购点：' + purchasePoint + '，当前库存：'+currentStock+'，预计库存：'+calcStock+'，目标库存：'+targetStock+'<br/>';
+
+                if (this.size === 'HB') {
+                    diffStock = targetStock - currentStock
+                    this.log += '✏️ 补货策略：目标库存 - 当前库存 = '+targetStock+' - '+currentStock+' = '+diffStock+'(计划补货数量) <br/>';
+                } else {
+                    diffStock = targetStock - calcStock    
+                    this.log += '✏️ 补货策略：目标库存 - 预计库存 = '+targetStock+' - '+calcStock+' = '+diffStock+'(计划补货数量) <br/>';
+                }
+
+
+                if (calcStock > purchasePoint) {
+                    this.log += '✏️ 预计库存 >= 采购点，不需要补货 <br/>';
+                }
+
+                // 计算补货批次
+                var arr = []
+                if (this.maximumLotSize) {
+                    var small = 0;
+                    if (diffStock >= this.maximumLotSize) {
+                        var index = parseInt(diffStock / this.maximumLotSize)
+                        for (var i = 0; i < index; i++) {
+                            arr.push(this.maximumLotSize)
+                        }
+
+                        if (diffStock % this.maximumLotSize !== 0) {
+                            small = diffStock - (index * this.maximumLotSize)    
+                        }
+                
+                    } else {
+                        small = diffStock
+                    }
+
+                    if (small > 0) {
+                        small = (this.minimumLotSize ? Math.max(this.minimumLotSize, small) : small)
+                        arr.push(small)                           
+                    }
+
+                } else if(this.minimumLotSize) {
+                    arr.push(Math.max(diffStock, this.minimumLotSize))    
+                } else {
+                    arr.push(diffStock)
+                }
+
+                arr.forEach((s, index) => {
+                    this.log +=  '✏️ 补货批次'+(index + 1)+'：'+s+ '<br/>';
+                })
+
+                this.log +=  '--------------------------<br/>';
+                this.log +=  '✏️ 合计补货：'+arr.reduce(function(previousValue, currentValue, currentIndex, array) {
+                                return previousValue + currentValue
+                            })+'';
+
+            }
+          }
+        })
+    </script>
+</body>
+</html>

@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>公式转换</title>
+    <link rel="stylesheet" href="https://unpkg.com/purecss@2.0.6/build/pure-min.css" integrity="sha384-Uu6IeWbM+gzNVXJcM9XV3SohHtmWE+3VGi496jvgX1jyvDTXfdK+rfZc8C1Aehk5" crossorigin="anonymous">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+    <div class="pure-g">
+        <div class="pure-u-24-24">
+            <div style="padding: 24px;" id="app">
+                <form class="pure-form">
+                    <fieldset>
+                        <legend>单位换算</legend>
+                        <div style="margin-bottom: 24px;">
+                            <select v-model="dimension">
+                                <option :value="d" v-for="d in dimensions">{{d}}</option>
+                            </select>
+                        </div>
+                        
+                        <input type="number" v-model.number="num" placeholder="Number" />
+                        <select v-model="source">
+                            <option :value="u" v-for="u in unit">{{u}}</option>
+                        </select>
+                       = <input type="number" v-model.number="result" :disabled="true" />
+                       <select v-model="target">
+                            <option :value="u" v-for="u in unit">{{u}}</option>
+                        </select>
+                    </fieldset>
+                    <button type="button" class="pure-button pure-button-primary" @click="execute" :disabled="false">换算</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    <script src="https://cdn.bootcdn.net/ajax/libs/vue/2.6.14/vue.min.js"></script>
+    <script type="text/javascript">
+        var db = {
+            "Tmp": [
+                {
+                    "name": "K",
+                    "m": 1,
+                    "M": 1,
+                    "b": 0
+                },
+                {
+                    "name": "°F",
+                    "m": 5,
+                    "M": 9,
+                    "b": 255.372222
+                },
+                {
+                    "name": "°C",
+                    "m": 1,
+                    "M": 1,
+                    "b": 273.150000
+                },
+            ],
+            "Length":[
+                {
+                    "name": "KM",
+                    "m": 1000,
+                    "M": 1,
+                    "b": 0
+                },
+                {
+                    "name": "M",
+                    "m": 1,
+                    "M": 1,
+                    "b": 0
+                },
+
+                {
+                    "name": "DM",
+                    "m": 1,
+                    "M": 10,
+                    "b": 0
+                },
+                {
+                    "name": "CM",
+                    "m": 1,
+                    "M": 100,
+                    "b": 0
+                },
+                {
+                    "name": "MM",
+                    "m": 1,
+                    "M": 1000,
+                    "b": 0
+                },
+            ]
+        }
+
+        var dictMap = {}
+        var dictItemMap = {}
+
+        var dimensions = Object.keys(db)
+
+        for(w in db) {
+            dictMap[w] = db[w].map(w => w.name)
+
+            db[w].forEach(function(item, index) {
+                dictItemMap[w + "-" + item.name] = item
+            })
+        }
+
+        new Vue({
+            el: '#app',
+            data: {
+                dimension: 'Length',
+                num: '',
+                source: '',
+                target: '',
+                result: ''
+            },
+            computed: {
+                unit() {
+                    return dictMap[this.dimension]
+                },
+                dimensions() {
+                    return dimensions
+                }
+            },
+            methods: {
+                execute() {
+                    var sDict = dictItemMap[this.dimension + '-' + this.source]
+                    var dDict = dictItemMap[this.dimension + '-' + this.target]
+
+                    if (sDict.name === dDict.name) {
+                        this.result = this.num    
+                    } else {
+                        // (M1m2* x2)/(m1M2) + b2 - b1
+                        this.result =  parseFloat(((dDict.M * sDict.m * this.num) / (dDict.m * sDict.M)).toFixed(6)) + sDict.b - dDict.b
+                    }
+                }
+            }
+        })
+    </script>
+
+</body>
+</html>
